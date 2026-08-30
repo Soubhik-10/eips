@@ -91,23 +91,6 @@ impl From<ApprovalScope> for u8 {
     }
 }
 
-/// The two gas budgets carried by an EIP-8141 frame.
-///
-/// Unlike legacy transactions, frame transactions do not use the EIP-8037
-/// reservoir split. Execution gas and state gas are declared independently
-/// and each budget is enforced separately.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub struct FrameLimits {
-    /// Maximum execution gas available to the frame.
-    pub execution: u64,
-    /// Maximum state gas available to the frame.
-    pub state: u64,
-}
-
 /// A single EIP-8141 transaction frame.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -121,8 +104,8 @@ pub struct Frame {
     pub flags: u8,
     /// Encoded target account. Empty bytes resolve to the transaction sender.
     pub target: Bytes,
-    /// Execution and state gas limits for this frame.
-    pub limits: FrameLimits,
+    /// Maximum gas available to this frame.
+    pub gas_limit: u64,
     /// Wei value transferred by this frame. Non-zero value is valid only for `SENDER` frames.
     pub value: U256,
     /// Calldata provided to the top-level frame call.
@@ -135,38 +118,11 @@ impl Frame {
         mode: FrameMode,
         flags: u8,
         target: Bytes,
-        execution_gas: u64,
+        gas_limit: u64,
         value: U256,
         data: Bytes,
     ) -> Self {
-        Self {
-            mode,
-            flags,
-            target,
-            limits: FrameLimits { execution: execution_gas, state: 0 },
-            value,
-            data,
-        }
-    }
-
-    /// Creates a new frame from raw field values, allowing both execution and state gas to be set.
-    pub const fn new_with_dynamic_limits(
-        mode: FrameMode,
-        flags: u8,
-        target: Bytes,
-        execution_gas: u64,
-        state_gas: u64,
-        value: U256,
-        data: Bytes,
-    ) -> Self {
-        Self {
-            mode,
-            flags,
-            target,
-            limits: FrameLimits { execution: execution_gas, state: state_gas },
-            value,
-            data,
-        }
+        Self { mode, flags, target, gas_limit, value, data }
     }
 
     /// Returns the target address, or `None` when the frame resolves to the transaction sender.
