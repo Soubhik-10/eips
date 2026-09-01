@@ -126,23 +126,16 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Creates a new frame from raw field values.
+    /// Creates a new frame from raw field values, including both gas limits.
     pub const fn new(
         mode: FrameMode,
         flags: u8,
         target: Bytes,
-        gas_limit: u64,
+        limits: FrameLimits,
         value: U256,
         data: Bytes,
     ) -> Self {
-        Self {
-            mode,
-            flags,
-            target,
-            limits: FrameLimits { execution: gas_limit, state: 0 },
-            value,
-            data,
-        }
+        Self { mode, flags, target, limits, value, data }
     }
 
     /// Returns the target address, or `None` when the frame resolves to the transaction sender.
@@ -197,9 +190,9 @@ impl Frame {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub struct TransactionFees {
-    /// Maximum priority fee per execution gas.
+    /// Maximum priority fee per gas.
     pub max_priority_fee_per_gas: U256,
-    /// Maximum total fee per execution gas.
+    /// Maximum total fee per gas.
     pub max_fee_per_gas: U256,
     /// Maximum fee per blob gas.
     pub max_fee_per_blob_gas: U256,

@@ -113,9 +113,9 @@ impl FrameSignature {
         self.msg.is_empty()
     }
 
-    /// Returns the explicit signed message, if one is present.
+    /// Returns the explicit non-zero signed message, if structurally valid.
     pub fn explicit_message(&self) -> Option<B256> {
-        if self.msg.len() == 32 {
+        if self.msg.len() == 32 && self.msg.iter().any(|byte| *byte != 0) {
             let mut bytes = [0u8; 32];
             bytes.copy_from_slice(&self.msg);
             Some(B256::from(bytes))
@@ -124,9 +124,11 @@ impl FrameSignature {
         }
     }
 
-    /// Returns the signer as an address for protocol-validated schemes.
+    /// Returns the signer as an address for a protocol-validated scheme.
     pub fn signer_address(&self) -> Option<Address> {
-        if self.signer.len() == 20 {
+        if matches!(self.scheme, SignatureScheme::Secp256k1 | SignatureScheme::P256)
+            && self.signer.len() == 20
+        {
             let mut bytes = [0u8; 20];
             bytes.copy_from_slice(&self.signer);
             Some(Address::from(bytes))
