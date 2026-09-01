@@ -183,7 +183,10 @@ impl Frame {
 
     /// Returns true if the constrained fields of an expiry verifier frame are valid.
     pub fn has_valid_expiry_verifier_fields(&self) -> bool {
-        self.flags == 0 && self.value.is_zero() && self.data.len() == crate::EXPIRY_DATA_LENGTH
+        self.flags == 0
+            && self.limits.state == 0
+            && self.value.is_zero()
+            && self.data.len() == crate::EXPIRY_DATA_LENGTH
     }
 }
 
