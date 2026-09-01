@@ -55,6 +55,19 @@ impl Decodable for FrameStatus {
     }
 }
 
+/// Gas used by a frame, reported independently for each gas dimension.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+pub struct FrameGasUsed {
+    /// Execution gas used by the frame, before transaction-level refunds.
+    pub execution: u64,
+    /// State gas attributed to the frame after refills and rollbacks.
+    pub state: u64,
+}
+
 /// Receipt information for a single frame.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -64,8 +77,8 @@ impl Decodable for FrameStatus {
 pub struct FrameReceipt<Log = alloy_primitives::Log> {
     /// Top-level frame status code.
     pub status: FrameStatus,
-    /// Gas used by this frame.
-    pub gas_used: u64,
+    /// Gas used by this frame in the execution and state dimensions.
+    pub gas_used: FrameGasUsed,
     /// Logs emitted by this frame.
     pub logs: Vec<Log>,
 }

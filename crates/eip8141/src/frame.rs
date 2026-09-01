@@ -105,7 +105,7 @@ pub struct FrameLimits {
 }
 
 /// A single EIP-8141 transaction frame.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, RlpEncodable)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
@@ -184,6 +184,37 @@ impl Frame {
     /// Returns true if the constrained fields of an expiry verifier frame are valid.
     pub fn has_valid_expiry_verifier_fields(&self) -> bool {
         self.flags == 0 && self.value.is_zero() && self.data.len() == crate::EXPIRY_DATA_LENGTH
+    }
+}
+
+#[derive(RlpDecodable)]
+struct FrameFields {
+    mode: FrameMode,
+    flags: u8,
+    target: Bytes,
+    limits: FrameLimits,
+    value: U256,
+    data: Bytes,
+}
+
+impl Decodable for Frame {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let fields = FrameFields::decode(buf)?;
+        if fields.flags & !crate::FRAME_FLAGS_MASK != 0 {
+            return Err(alloy_rlp::Error::Custom("invalid EIP-8141 frame flags"));
+        }
+        if !fields.target.is_empty() && fields.target.len() != 20 {
+            return Err(alloy_rlp::Error::Custom("invalid EIP-8141 frame target"));
+        }
+
+        Ok(Self {
+            mode: fields.mode,
+            flags: fields.flags,
+            target: fields.target,
+            limits: fields.limits,
+            value: fields.value,
+            data: fields.data,
+        })
     }
 }
 
