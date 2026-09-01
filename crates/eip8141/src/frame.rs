@@ -91,6 +91,19 @@ impl From<ApprovalScope> for u8 {
     }
 }
 
+/// The independent execution and state gas budgets carried by an EIP-8141 frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+pub struct FrameLimits {
+    /// Maximum execution gas available to the frame.
+    pub execution: u64,
+    /// Maximum state gas available to the frame.
+    pub state: u64,
+}
+
 /// A single EIP-8141 transaction frame.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -104,8 +117,8 @@ pub struct Frame {
     pub flags: u8,
     /// Encoded target account. Empty bytes resolve to the transaction sender.
     pub target: Bytes,
-    /// Maximum gas available to this frame.
-    pub gas_limit: u64,
+    /// Independent execution and state gas limits for this frame.
+    pub limits: FrameLimits,
     /// Wei value transferred by this frame. Non-zero value is valid only for `SENDER` frames.
     pub value: U256,
     /// Calldata provided to the top-level frame call.
@@ -122,7 +135,14 @@ impl Frame {
         value: U256,
         data: Bytes,
     ) -> Self {
-        Self { mode, flags, target, gas_limit, value, data }
+        Self {
+            mode,
+            flags,
+            target,
+            limits: FrameLimits { execution: gas_limit, state: 0 },
+            value,
+            data,
+        }
     }
 
     /// Returns the target address, or `None` when the frame resolves to the transaction sender.
@@ -165,6 +185,21 @@ impl Frame {
     pub fn has_valid_expiry_verifier_fields(&self) -> bool {
         self.flags == 0 && self.value.is_zero() && self.data.len() == crate::EXPIRY_DATA_LENGTH
     }
+}
+
+/// Fee parameters carried by an EIP-8141 transaction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+pub struct TransactionFees {
+    /// Maximum priority fee per execution gas.
+    pub max_priority_fee_per_gas: U256,
+    /// Maximum total fee per execution gas.
+    pub max_fee_per_gas: U256,
+    /// Maximum fee per blob gas.
+    pub max_fee_per_blob_gas: U256,
 }
 
 #[cfg(test)]
