@@ -17,15 +17,38 @@ pub enum FrameMode {
     Verify = 1,
     /// Execute as the transaction sender.
     Sender = 2,
+    /// Execute a read-only assertion after the transaction body.
+    PostTx = 3,
 }
 
 impl FrameMode {
+    /// Returns true if this is [`Self::Default`].
+    pub const fn is_default(self) -> bool {
+        matches!(self, Self::Default)
+    }
+
+    /// Returns true if this is [`Self::Verify`].
+    pub const fn is_verify(self) -> bool {
+        matches!(self, Self::Verify)
+    }
+
+    /// Returns true if this is [`Self::Sender`].
+    pub const fn is_sender(self) -> bool {
+        matches!(self, Self::Sender)
+    }
+
+    /// Returns true if this is an EIP-7906 post-transaction assertion frame.
+    pub const fn is_post_tx(self) -> bool {
+        matches!(self, Self::PostTx)
+    }
+
     /// Attempts to convert a raw mode byte into a [`FrameMode`].
     pub const fn try_from_u8(value: u8) -> Option<Self> {
         match value {
             0 => Some(Self::Default),
             1 => Some(Self::Verify),
             2 => Some(Self::Sender),
+            3 => Some(Self::PostTx),
             _ => None,
         }
     }
@@ -52,6 +75,38 @@ pub enum ApprovalScope {
 }
 
 impl ApprovalScope {
+    /// Returns true if this is [`Self::None`].
+    pub const fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    /// Returns true if this is [`Self::Payment`].
+    pub const fn is_payment(self) -> bool {
+        matches!(self, Self::Payment)
+    }
+
+    /// Returns true if this is [`Self::Execution`].
+    pub const fn is_execution(self) -> bool {
+        matches!(self, Self::Execution)
+    }
+
+    /// Returns true if this is [`Self::ExecutionAndPayment`].
+    pub const fn is_execution_and_payment(self) -> bool {
+        matches!(self, Self::ExecutionAndPayment)
+    }
+
+    /// Returns true if this scope allows execution approval, including
+    /// [`Self::ExecutionAndPayment`].
+    pub const fn allows_execution(self) -> bool {
+        matches!(self, Self::Execution | Self::ExecutionAndPayment)
+    }
+
+    /// Returns true if this scope allows payment approval, including
+    /// [`Self::ExecutionAndPayment`].
+    pub const fn allows_payment(self) -> bool {
+        matches!(self, Self::Payment | Self::ExecutionAndPayment)
+    }
+
     /// Attempts to convert a raw scope byte into an [`ApprovalScope`].
     pub const fn try_from_u8(value: u8) -> Option<Self> {
         match value {
@@ -141,6 +196,11 @@ impl Frame {
         self.flags & crate::ATOMIC_BATCH_FLAG != 0
     }
 
+    /// Returns true if this is an EIP-7906 post-transaction assertion frame.
+    pub const fn is_post_tx(&self) -> bool {
+        self.mode.is_post_tx()
+    }
+
     /// Returns true if any reserved flag bit is set, which makes the transaction invalid.
     pub const fn has_reserved_flags(&self) -> bool {
         self.flags & !crate::FRAME_FLAGS_MASK != 0
@@ -163,6 +223,25 @@ impl Frame {
     }
 }
 
+/// Returns true if `POST_TX` frames form a contiguous trailing suffix.
+///
+/// EIP-7906 permits any number of EIP-8141 frames before the suffix, including no
+/// `POST_TX` frames at all. Once a `POST_TX` frame occurs, every following frame must also be
+/// `POST_TX`.
+pub fn has_valid_post_tx_suffix(frames: &[Frame]) -> bool {
+    let mut saw_post_tx = false;
+
+    for frame in frames {
+        if frame.is_post_tx() {
+            saw_post_tx = true;
+        } else if saw_post_tx {
+            return false;
+        }
+    }
+
+    true
+}
+
 /// Fee parameters carried by an EIP-8141 transaction.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -180,8 +259,22 @@ pub struct TransactionFees {
 
 #[cfg(test)]
 mod tests {
-    use super::{Frame, FrameMode};
+    use super::{Frame, FrameMode, has_valid_post_tx_suffix};
     use alloy_primitives::{Bytes, U256};
+    use alloy_rlp::{Decodable, Encodable};
+
+    #[test]
+    fn approval_permissions_from_frame_flags() {
+        for (scope, execution, payment) in
+            [(0, false, false), (1, false, true), (2, true, false), (3, true, true)]
+        {
+            for atomic in [0, crate::ATOMIC_BATCH_FLAG] {
+                let frame = Frame { flags: scope | atomic, ..Default::default() };
+                assert_eq!(frame.allowed_scope().allows_execution(), execution);
+                assert_eq!(frame.allowed_scope().allows_payment(), payment);
+            }
+        }
+    }
 
     fn expiry_frame() -> Frame {
         Frame {
@@ -204,5 +297,30 @@ mod tests {
 
         assert!(frame.is_expiry_verifier());
         assert!(!frame.has_valid_expiry_verifier_fields());
+    }
+
+    #[test]
+    fn post_tx_mode_encodes_as_eip7906_value() {
+        assert_eq!(u8::from(FrameMode::PostTx), 3);
+        assert_eq!(FrameMode::try_from_u8(3), Some(FrameMode::PostTx));
+        assert!(FrameMode::PostTx.is_post_tx());
+        assert!(!FrameMode::Sender.is_post_tx());
+
+        let mut encoded = Vec::new();
+        FrameMode::PostTx.encode(&mut encoded);
+        assert_eq!(encoded, [3]);
+        assert_eq!(FrameMode::decode(&mut encoded.as_slice()), Ok(FrameMode::PostTx));
+    }
+
+    #[test]
+    fn post_tx_frames_must_be_a_trailing_suffix() {
+        let post_tx = Frame { mode: FrameMode::PostTx, ..Default::default() };
+        let ordinary = Frame::default();
+
+        assert!(has_valid_post_tx_suffix(&[]));
+        assert!(has_valid_post_tx_suffix(&[ordinary.clone(), post_tx.clone(), post_tx.clone()]));
+        assert!(has_valid_post_tx_suffix(&[post_tx.clone()]));
+        assert!(!has_valid_post_tx_suffix(&[post_tx.clone(), ordinary.clone()]));
+        assert!(!has_valid_post_tx_suffix(&[ordinary, post_tx, Frame::default()]));
     }
 }

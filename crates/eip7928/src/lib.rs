@@ -39,9 +39,17 @@ pub use code_change::*;
 pub mod account_changes;
 pub use account_changes::*;
 
+/// Module for the post-block account state recorded by an account's changes.
+pub mod account_info;
+pub use account_info::*;
+
 /// Module for managing block access lists.
 pub mod block_access_list;
 pub use block_access_list::*;
+
+/// Module for validating decoded block access lists.
+pub mod validation;
+pub use validation::*;
 
 /// Module for comparing block access lists.
 pub mod diff;

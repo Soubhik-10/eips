@@ -1,15 +1,10 @@
 //! EIP-8250 keyed nonce domains.
 
 use alloc::vec::Vec;
-use alloy_primitives::{Address, B256, U256, address, keccak256};
+use alloy_primitives::{Address, B256, U256, keccak256};
 use alloy_rlp::Encodable;
 
-/// Protocol-owned keyed nonce storage account.
-pub const NONCE_MANAGER: Address = address!("0000000000000000000000000000000000008250");
-/// Runtime that rejects ordinary calls to the nonce manager.
-pub const NONCE_MANAGER_CODE: [u8; 5] = [0x60, 0x00, 0x60, 0x00, 0xfd];
-/// Maximum number of nonce domains selected by one transaction.
-pub const MAX_NONCE_KEYS: usize = 16;
+use crate::MAX_NONCE_KEYS;
 
 /// Validates the canonical set of nonce keys, including the legacy singleton `[0]`.
 pub fn validate_nonce_keys(keys: &[U256]) -> Result<(), &'static str> {
@@ -33,6 +28,11 @@ pub fn nonce_slot(sender: Address, key: U256) -> U256 {
     U256::from_be_bytes(keccak256(input).0)
 }
 
+/// Returns the keyed nonce storage slot as a hash.
+pub fn nonce_manager_slot(sender: Address, key: U256) -> B256 {
+    B256::from(nonce_slot(sender, key).to_be_bytes::<32>())
+}
+
 /// Hashes the key count followed by each key as a 32-byte big-endian integer.
 pub fn nonce_keys_hash(keys: &[U256]) -> B256 {
     let mut input = Vec::with_capacity(32 * (keys.len() + 1));
@@ -54,6 +54,7 @@ pub fn nonce_calldata(keys: &[U256], nonce: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::address;
 
     #[test]
     fn canonical_nonce_sets() {
